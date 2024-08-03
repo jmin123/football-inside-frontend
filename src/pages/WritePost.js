@@ -7,77 +7,59 @@ import api from '../components/api';
 function WritePost() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useUser();
 
   const categories = [
-    { id: 1, name: 'Domestic' },
-    { id: 2, name: 'International' },
+    { id: 1, name: 'Domestic', path: '/domestic' },
+    { id: 2, name: 'International', path: '/international' },
     // Add more categories as needed
   ];
 
   useEffect(() => {
-    const userString = localStorage.getItem('user');
-    console.log('User string in WritePost:', userString);
-    if (userString) {
-      try {
-        const userData = JSON.parse(userString);
-        console.log('Parsed user data in WritePost:', userData);
-      } catch (error) {
-        console.error('Error parsing user data in WritePost:', error);
-      }
-    }
-  
     if (!user) {
-      console.log('No user in context, redirecting to login');
       navigate('/login', { state: { from: location.pathname } });
     }
-  }, [user, navigate, location.pathname]);
-  
+
+    // Set the default category based on the state passed from the previous page
+    if (location.state && location.state.category) {
+      const category = categories.find(cat => cat.name.toLowerCase() === location.state.category);
+      if (category) {
+        setSelectedCategory(category.id.toString());
+      }
+    }
+  }, [user, navigate, location]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-  
-    const userString = localStorage.getItem('user');
-    console.log('User string in handleSubmit:', userString);
-  
+
     if (!user) {
-      console.log('No user in context, cannot submit post');
       setError('로그인이 필요합니다.');
       return;
     }
-  
-    if (selectedCategories.length === 0) {
+
+    if (!selectedCategory) {
       setError('카테고리를 선택해주세요.');
       return;
     }
-  
-    console.log('Submitting post with user:', user);
-  
+
     try {
       const response = await api.post('/posts', {
         title,
         content,
-        categoryIds: selectedCategories,
+        categoryIds: [parseInt(selectedCategory)],
       });
       console.log('Post creation response:', response.data);
-      // Navigate to the page of the first selected category
-      navigate(`/category/${categories.find(cat => cat.id === selectedCategories[0]).name.toLowerCase()}`);
+      const category = categories.find(cat => cat.id.toString() === selectedCategory);
+      navigate(category.path);
     } catch (error) {
       console.error('Error creating post:', error.response?.data || error.message);
       setError(error.response?.data?.message || '게시글 작성 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
-  };
-
-  const handleCategoryChange = (categoryId) => {
-    setSelectedCategories(prev => 
-      prev.includes(categoryId)
-        ? prev.filter(id => id !== categoryId)
-        : [...prev, categoryId]
-    );
   };
 
   return (
@@ -108,16 +90,18 @@ function WritePost() {
         </Form.Group>
         <Form.Group className="mb-3">
           <Form.Label>카테고리</Form.Label>
-          {categories.map(category => (
-            <Form.Check 
-              type="checkbox"
-              key={category.id}
-              id={`category-${category.id}`}
-              label={category.name}
-              checked={selectedCategories.includes(category.id)}
-              onChange={() => handleCategoryChange(category.id)}
-            />
-          ))}
+          <Form.Select 
+            value={selectedCategory} 
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            required
+          >
+            <option value="">카테고리 선택</option>
+            {categories.map(category => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Form.Select>
         </Form.Group>
         <Button variant="primary" type="submit">
           글 작성
