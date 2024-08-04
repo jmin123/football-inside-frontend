@@ -1,23 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, ListGroup, Form, Button, Modal } from 'react-bootstrap';
+import { Container, Row, Col, Card, ListGroup, Form, Button, Modal, Alert } from 'react-bootstrap';
 import api from '../components/api';
 import { useUser } from '../components/UserContext';
 
 function PostDetail() {
   const [post, setPost] = useState(null);
   const [categoryPosts, setCategoryPosts] = useState([]);
+  // 댓글
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const { id } = useParams();
-  const { user } = useUser();
+  const MAX_COMMENT_LENGTH = 500;
+  // 수정
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
+  // 추천 
+  const [isAuthor, setIsAuthor] = useState(false);
+  const [recommendationCount, setRecommendationCount] = useState(0);
+  const [hasRecommended, setHasRecommended] = useState(false);
+  const [recommendError, setRecommendError] = useState('');
+  // 인증
+  const { id } = useParams();
+  const { user } = useUser();
+  // 그 외
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const navigate = useNavigate();
-  const MAX_COMMENT_LENGTH = 500;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -27,9 +37,10 @@ function PostDetail() {
           api.get(`/posts/${id}/comments`)
         ]);
 
-        console.log('Post data:', postResponse.data);
         setPost(postResponse.data);
         setComments(commentsResponse.data);
+        setRecommendationCount(postResponse.data.recommendationCount);
+        setIsAuthor(user && user.username === postResponse.data.username);
 
         if (postResponse.data.categoryName) {
           let categoryName;
@@ -46,7 +57,6 @@ function PostDetail() {
           console.log('Category posts:', categoryResponse.data);
           setCategoryPosts(categoryResponse.data.content);
         }
-
         setLoading(false);
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -56,7 +66,7 @@ function PostDetail() {
     };
 
     fetchData();
-  }, [id]);
+  }, [id, user]);
 
   const handleEdit = () => {
     setEditTitle(post.title);
@@ -70,8 +80,6 @@ function PostDetail() {
         title: editTitle,
         content: editContent,
         categoryIds: post.categoryName.map(name => {
-          // You might need to implement a way to get category IDs from names
-          // This is just a placeholder
           return name === 'domestic' ? 1 : 2;
         })
       });
@@ -88,10 +96,10 @@ function PostDetail() {
       try {
         const token = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).token : null;
         console.log('Token before delete request:', token);
-        
+
         const response = await api.delete(`/posts/${id}`);
         console.log('Delete response:', response);
-        
+
         navigate('/');
       } catch (error) {
         console.error('Error deleting post:', error);
@@ -125,6 +133,38 @@ function PostDetail() {
     }
   };
 
+  // 추천
+  const handleRecommend = async () => {
+    if (!user) {
+      alert('추천하려면 로그인이 필요합니다.');
+      return;
+    }
+
+    if (isAuthor) {
+      setRecommendError('자신의 게시글은 추천할 수 없습니다.');
+      return;
+    }
+
+    try {
+      const response = await api.post(`/posts/${id}/recommend`);
+      setRecommendationCount(response.data.recommendationCount);
+      setHasRecommended(true);
+      setRecommendError('');
+    } catch (error) {
+      console.error('Error recommending post:', error);
+      if (error.response && error.response.status === 400) {
+        if (error.response.data === "You cannot recommend your own post") {
+          setRecommendError('자신의 게시글은 추천할 수 없습니다.');
+        } else {
+          setRecommendError('이미 이 게시글을 추천하셨습니다.');
+        }
+      } else {
+        setRecommendError('게시글 추천 중 오류가 발생했습니다.');
+      }
+    }
+  };
+
+  // 그 외
   if (loading) return <div>로딩중...</div>;
   if (error) return <div>{error}</div>;
   if (!post) return <div>이런! 해당 게시글이 보이지 않네요!</div>;
@@ -146,15 +186,28 @@ function PostDetail() {
             <Card.Body>
               <Card.Title>{post.title}</Card.Title>
               <Card.Subtitle className="mb-2 text-muted">
-                작성자 : {post.username} 게시시간 : {new Date(post.createdAt).toLocaleDateString()}
+                작성자: {post.username} | 게시 시간: {new Date(post.createdAt).toLocaleDateString()}
               </Card.Subtitle>
               <Card.Text>{post.content}</Card.Text>
-              {user && user.username === post.username && (
+              <div className="d-flex justify-content-between align-items-center">
                 <div>
-                  <Button variant="primary" onClick={handleEdit} className="me-2">수정</Button>
-                  <Button variant="danger" onClick={handleDelete}>삭제</Button>
+                  추천 수: {recommendationCount}
+                  {user && !hasRecommended && !isAuthor && (
+                    <Button variant="outline-primary" onClick={handleRecommend} className="ms-2">
+                      추천하기
+                    </Button>
+                  )}
+                  {hasRecommended && <span className="ms-2 text-success">추천완료</span>}
+                  {isAuthor && <span className="ms-2 text-muted">자신의 게시글은 추천할 수 없습니다</span>}
                 </div>
-              )}
+                {user && user.username === post.username && (
+                  <div>
+                    <Button variant="primary" onClick={handleEdit} className="me-2">수정</Button>
+                    <Button variant="danger" onClick={handleDelete}>삭제</Button>
+                  </div>
+                )}
+              </div>
+              {recommendError && <Alert variant="danger" className="mt-2">{recommendError}</Alert>}
             </Card.Body>
           </Card>
           <Card className="mb-4">
@@ -225,17 +278,17 @@ function PostDetail() {
           <Form>
             <Form.Group className="mb-3">
               <Form.Label>제목</Form.Label>
-              <Form.Control 
-                type="text" 
+              <Form.Control
+                type="text"
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
               />
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>내용</Form.Label>
-              <Form.Control 
-                as="textarea" 
-                rows={3} 
+              <Form.Control
+                as="textarea"
+                rows={3}
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
               />
