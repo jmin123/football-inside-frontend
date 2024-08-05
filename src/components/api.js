@@ -11,6 +11,7 @@ api.interceptors.request.use(
       const user = JSON.parse(userString);
       if (user && user.token) {
         config.headers['Authorization'] = `Bearer ${user.token}`;
+        console.log('Authorization header set:', config.headers['Authorization']);
       }
     }
     return config;
@@ -20,4 +21,14 @@ api.interceptors.request.use(
   }
 );
 
-export default api; 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 403) {
+      console.error('Authentication error:', error);
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;

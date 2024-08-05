@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Form, Button, Container, Row, Col, Alert } from 'react-bootstrap';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '../components/api'; 
+import api from '../components/api';
 import { useUser } from '../components/UserContext';
 
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
@@ -14,11 +15,24 @@ function Login() {
 
   const from = location.state?.from || '/';
 
+  const handleRememberMeChange = (e) => {
+    if (e.target.checked) {
+      const userConfirmed = window.confirm('이 버튼을 클릭 시 창을 닫아도 로그인이 유지됩니다. 공공장소에서 사용하는 것을 비추천합니다.');
+      if (userConfirmed) {
+        setRememberMe(true);
+      } else {
+        setRememberMe(false);
+      }
+    } else {
+      setRememberMe(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post('/auth/login', { email, password, rememberMe });
       console.log('Login response:', response.data);
       
       if (response.data && response.data.token) {
@@ -27,8 +41,13 @@ function Login() {
           token: response.data.token
         };
         
-        localStorage.setItem('user', JSON.stringify(userData));
-        console.log('User data stored in localStorage:', userData);
+        if (rememberMe) {
+          localStorage.setItem('user', JSON.stringify(userData));
+        } else {
+          sessionStorage.setItem('user', JSON.stringify(userData));
+        }
+        
+        console.log('User data stored in ' + (rememberMe ? 'localStorage' : 'sessionStorage') + ':', userData);
         setUser(userData);
         navigate(from, { replace: true });
       } else {
@@ -38,7 +57,7 @@ function Login() {
       console.error('Login error:', error.response?.data || error.message);
       setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
-  };  
+  };
 
   return (
     <Container className="mt-5">
@@ -65,6 +84,14 @@ function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+              />
+            </Form.Group>
+            <Form.Group className="mb-3" controlId="formBasicCheckbox">
+              <Form.Check 
+                type="checkbox" 
+                label="자동 로그인" 
+                checked={rememberMe}
+                onChange={handleRememberMeChange}
               />
             </Form.Group>
             <Button variant="primary" type="submit" className="w-100">

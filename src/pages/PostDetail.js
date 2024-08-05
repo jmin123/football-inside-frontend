@@ -7,23 +7,21 @@ import { useUser } from '../components/UserContext';
 function PostDetail() {
   const [post, setPost] = useState(null);
   const [categoryPosts, setCategoryPosts] = useState([]);
-  // 댓글
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editCommentContent, setEditCommentContent] = useState('');
+  const [commentError, setCommentError] = useState('');
   const MAX_COMMENT_LENGTH = 500;
-  // 수정
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
-  // 추천 
   const [isAuthor, setIsAuthor] = useState(false);
   const [recommendationCount, setRecommendationCount] = useState(0);
   const [hasRecommended, setHasRecommended] = useState(false);
   const [recommendError, setRecommendError] = useState('');
-  // 인증
   const { id } = useParams();
-  const { user } = useUser();
-  // 그 외
+  const { user, setUser } = useUser();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -94,20 +92,10 @@ function PostDetail() {
   const handleDelete = async () => {
     if (window.confirm('정말로 이 게시글을 삭제하시겠습니까?')) {
       try {
-        const token = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).token : null;
-        console.log('Token before delete request:', token);
-
-        const response = await api.delete(`/posts/${id}`);
-        console.log('Delete response:', response);
-
+        await api.delete(`/posts/${id}`);
         navigate('/');
       } catch (error) {
         console.error('Error deleting post:', error);
-        if (error.response) {
-          console.error('Error response:', error.response.data);
-          console.error('Error status:', error.response.status);
-          console.error('Error headers:', error.response.headers);
-        }
         alert('게시글 삭제 중 오류가 발생했습니다.');
       }
     }
@@ -116,32 +104,81 @@ function PostDetail() {
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
     if (!user) {
-      alert('댓글을 작성하려면 로그인이 필요합니다.');
+      setError('댓글을 작성하려면 로그인이 필요합니다.');
       return;
     }
     if (newComment.length > MAX_COMMENT_LENGTH) {
-      alert(`댓글은 ${MAX_COMMENT_LENGTH}자를 초과할 수 없습니다.`);
+      setError(`댓글은 ${MAX_COMMENT_LENGTH}자를 초과할 수 없습니다.`);
       return;
     }
     try {
+      console.log('Submitting comment with token:', user.token);
       const response = await api.post(`/posts/${id}/comments`, { content: newComment });
       setComments([...comments, response.data]);
       setNewComment('');
+      setError('');
     } catch (err) {
       console.error('Error submitting comment:', err);
-      alert('댓글 작성 중 오류가 발생했습니다.');
+      if (err.response) {
+        console.error('Error response:', err.response.data);
+        console.error('Error status:', err.response.status);
+      }
+      if (err.response && err.response.status === 403) {
+        setError('인증에 실패했습니다. 다시 로그인해 주세요.');
+        localStorage.removeItem('user');
+        setUser(null);
+        navigate('/login');
+      } else {
+        setError('댓글 작성 중 오류가 발생했습니다: ' + (err.response?.data?.message || err.message));
+      }
     }
   };
 
-  // 추천
+  const handleCommentEdit = (commentId, content) => {
+    setEditingCommentId(commentId);
+    setEditCommentContent(content);
+  };
+
+  const handleCommentUpdate = async (commentId) => {
+    try {
+      const response = await api.put(`/posts/${id}/comments/${commentId}`, {
+        content: editCommentContent
+      });
+      setComments(comments.map(comment =>
+        comment.id === commentId ? response.data : comment
+      ));
+      setEditingCommentId(null);
+      setCommentError('');
+    } catch (error) {
+      console.error('Error updating comment:', error);
+      if (error.response && error.response.status === 403) {
+        setCommentError('댓글을 수정할 권한이 없습니다.');
+      } else {
+        setCommentError('댓글 수정 중 오류가 발생했습니다.');
+      }
+    }
+  };
+
+  const handleCommentDelete = async (commentId) => {
+    if (window.confirm('정말로 이 댓글을 삭제하시겠습니까?')) {
+      try {
+        await api.delete(`/posts/${id}/comments/${commentId}`);
+        setComments(comments.filter(comment => comment.id !== commentId));
+        setCommentError('');
+      } catch (error) {
+        console.error('Error deleting comment:', error);
+        if (error.response && error.response.status === 403) {
+          setCommentError('댓글을 삭제할 권한이 없습니다.');
+        } else {
+          setCommentError('댓글 삭제 중 오류가 발생했습니다.');
+        }
+      }
+    }
+  };
+
   const handleRecommend = async () => {
     if (!user) {
-      alert('추천하려면 로그인이 필요합니다.');
-      return;
-    }
-
-    if (isAuthor) {
-      setRecommendError('자신의 게시글은 추천할 수 없습니다.');
+      setRecommendError('추천하려면 로그인이 필요합니다.');
       return;
     }
 
@@ -152,19 +189,16 @@ function PostDetail() {
       setRecommendError('');
     } catch (error) {
       console.error('Error recommending post:', error);
-      if (error.response && error.response.status === 400) {
-        if (error.response.data === "You cannot recommend your own post") {
-          setRecommendError('자신의 게시글은 추천할 수 없습니다.');
-        } else {
-          setRecommendError('이미 이 게시글을 추천하셨습니다.');
-        }
+      if (error.response && error.response.status === 403) {
+        setRecommendError('자신의 게시글은 추천할 수 없습니다.');
+      } else if (error.response && error.response.status === 400) {
+        setRecommendError('이미 이 게시글을 추천하셨습니다.');
       } else {
         setRecommendError('게시글 추천 중 오류가 발생했습니다.');
       }
     }
   };
 
-  // 그 외
   if (loading) return <div>로딩중...</div>;
   if (error) return <div>{error}</div>;
   if (!post) return <div>이런! 해당 게시글이 보이지 않네요!</div>;
@@ -192,13 +226,10 @@ function PostDetail() {
               <div className="d-flex justify-content-between align-items-center">
                 <div>
                   추천 수: {recommendationCount}
-                  {user && !hasRecommended && !isAuthor && (
-                    <Button variant="outline-primary" onClick={handleRecommend} className="ms-2">
-                      추천하기
-                    </Button>
-                  )}
+                  <Button variant="outline-primary" onClick={handleRecommend} className="ms-2">
+                    추천하기
+                  </Button>
                   {hasRecommended && <span className="ms-2 text-success">추천완료</span>}
-                  {isAuthor && <span className="ms-2 text-muted">자신의 게시글은 추천할 수 없습니다</span>}
                 </div>
                 {user && user.username === post.username && (
                   <div>
@@ -213,14 +244,64 @@ function PostDetail() {
           <Card className="mb-4">
             <Card.Header>댓글</Card.Header>
             <Card.Body>
+              {commentError && <Alert variant="danger">{commentError}</Alert>}
               <ListGroup variant="flush">
                 {comments.map(comment => (
                   <ListGroup.Item key={comment.id}>
-                    <p>{comment.content}</p>
-                    <small className="text-muted">
-                      작성자: {comment.username} |
-                      작성시간: {new Date(comment.createdAt).toLocaleString()}
-                    </small>
+                    {editingCommentId === comment.id ? (
+                      <Form onSubmit={(e) => {
+                        e.preventDefault();
+                        handleCommentUpdate(comment.id);
+                      }}>
+                        <Form.Group>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            value={editCommentContent}
+                            onChange={(e) => setEditCommentContent(e.target.value)}
+                            maxLength={MAX_COMMENT_LENGTH}
+                          />
+                        </Form.Group>
+                        <div className="d-flex justify-content-end mt-2">
+                          <Button variant="secondary" onClick={() => setEditingCommentId(null)} className="me-2">
+                            취소
+                          </Button>
+                          <Button type="submit" variant="primary">
+                            수정 완료
+                          </Button>
+                        </div>
+                      </Form>
+                    ) : (
+                      <>
+                        <p>{comment.content}</p>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <small className="text-muted">
+                            작성자: {comment.username}
+                            {comment.username === post.username && <strong> - 작성자</strong>} |
+                            작성시간: {new Date(comment.createdAt).toLocaleString()}
+                          </small>
+                          {user && user.username === comment.username && (
+                            <div>
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() => handleCommentEdit(comment.id, comment.content)}
+                                className="me-2"
+                              >
+                                수정
+                              </Button>
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => handleCommentDelete(comment.id)}
+                              >
+                                삭제
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </ListGroup.Item>
                 ))}
               </ListGroup>
