@@ -1,97 +1,112 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card } from 'react-bootstrap';
-import { Link, useNavigate } from 'react-router-dom';
+import { Container, Row, Col, Card, Alert } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 
 function MainPage() {
-  const navigate = useNavigate();
-  const [domesticPosts, setDomesticPosts] = useState([]);
-  const [internationalPosts, setInternationalPosts] = useState([]);
-  const [domesticPage, setDomesticPage] = useState(0);
-  const [internationalPage, setInternationalPage] = useState(0);
-  const [hasFetchedDomestic, setHasFetchedDomestic] = useState(false);
-  const [hasFetchedInternational, setHasFetchedInternational] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [posts, setPosts] = useState({});
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!hasFetchedDomestic) {
-      fetchPosts('domestic', domesticPage, setDomesticPosts, setDomesticPage);
-      setHasFetchedDomestic(true);
-    }
-  }, [hasFetchedDomestic, domesticPage]);
+    const fetchCategoriesAndPosts = async () => {
+      try {
+        const categoriesResponse = await axios.get('/api/categories');
+        const fetchedCategories = categoriesResponse.data;
+        setCategories(fetchedCategories);
 
-  useEffect(() => {
-    if (!hasFetchedInternational) {
-      fetchPosts('international', internationalPage, setInternationalPosts, setInternationalPage);
-      setHasFetchedInternational(true);
-    }
-  }, [hasFetchedInternational, internationalPage]);
+        const postsPromises = fetchedCategories.map(category =>
+          axios.get(`/api/posts/category/name/${category.name}?page=0&size=10`)
+            .then(response => ({
+              categoryName: category.name,
+              posts: response.data.content || []
+            }))
+        );
 
-  const fetchPosts = (categoryName, page, setPosts, setPage) => {
-    axios.get(`/api/posts/category/name/${categoryName}?page=${page}&size=10`)
-      .then(response => {
-        console.log(`Response for ${categoryName}:`, response.data);
-        if (response.data.content && response.data.content.length > 0) {
-          setPosts(response.data.content);
-          setPage(page + 1);
-        } else {
-          console.log(`No posts found for category: ${categoryName}`);
-        }
-      })
-      .catch(error => {
-        console.error(`Error fetching posts for category ${categoryName}:`, error);
-        if (error.response) {
-          console.error('Error response:', error.response.data);
-        }
-      });
-  };
-  
-  useEffect(() => {
-    fetchPosts('domestic', 0, setDomesticPosts, setDomesticPage);
-    fetchPosts('international', 0, setInternationalPosts, setInternationalPage);
+        const categorizedPosts = await Promise.all(postsPromises);
+
+        const postsWithComments = await Promise.all(
+          categorizedPosts.map(async ({ categoryName, posts }) => {
+            const postsWithCommentCounts = await Promise.all(
+              posts.map(async post => {
+                const commentResponse = await axios.get(`/api/posts/${post.id}/comments`);
+                return {
+                  ...post,
+                  commentCount: commentResponse.data.page.totalElements
+                };
+              })
+            );
+            return { categoryName, posts: postsWithCommentCounts };
+          })
+        );
+
+        const postsObject = postsWithComments.reduce((acc, { categoryName, posts }) => {
+          acc[categoryName] = posts;
+          return acc;
+        }, {});
+
+        setPosts(postsObject);
+      } catch (err) {
+        setError('Failed to fetch data. Please try again later.');
+      }
+    };
+
+    fetchCategoriesAndPosts();
   }, []);
 
-  const renderPosts = (posts, category) => {
-    return posts.map(post => (
+  const renderPosts = (categoryPosts, categoryName) => {
+    return categoryPosts.map(post => (
       <Card key={post.id} className="mb-3">
         <Card.Body>
           <Card.Title>
-            <Link to={`/posts/${category}/${post.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link to={`/posts/${categoryName}/${post.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
               {post.title}
+              <span style={{ fontSize: '0.8em', marginLeft: '5px', color: '#003CFA' }}>
+                [{post.commentCount}]
+              </span>
             </Link>
           </Card.Title>
         </Card.Body>
       </Card>
     ));
-  };  
+  };
 
-  const LoadMoreButton = ({ category}) => (
-    <div className="text-center mt-3 mb-3">
-      <button onClick={() => navigate(`/${category}`)} className="btn btn-primary">
-        더보기
-      </button>
+  const AdSpace = ({ side }) => (
+    <div className="ad-space" style={{ height: '100%', backgroundColor: '#f0f0f0', padding: '10px' }}>
+      <p style={{ textAlign: 'center' }}>광고란 ({side})</p>
     </div>
   );
+
+  if (error) {
+    return (
+      <Container className="mt-4">
+        <Alert variant="danger">{error}</Alert>
+      </Container>
+    );
+  }
 
   return (
     <Container fluid className="mt-4">
       <Row>
-        <Col md={6} className="post-column">
-          <h2 className="mb-3">
-            <Link to="/domestic" style={{ color: 'inherit', textDecoration: 'none' }}>
-              국내축구
-            </Link>
-          </h2>
-          {renderPosts(domesticPosts, 'domestic')}
-          <LoadMoreButton category="domestic" />
+        <Col md={2}>
+          <AdSpace side="좌" />
         </Col>
-        <Col md={6} className="post-column">
-          <h2 className="mb-3">
-            <Link to="/international" style={{ color: 'inherit', textDecoration: 'none' }}>
-              해외축구
-            </Link>
-          </h2>
-          {renderPosts(internationalPosts, 'international')}
-          <LoadMoreButton category="international" />
+        <Col md={8}>
+          <Row>
+            {categories.map(category => (
+              <Col md={6} key={category.id} className="post-column">
+                <h2 className="mb-3">
+                  <Link to={`/${category.name}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                    {category.nameKr}
+                  </Link>
+                </h2>
+                {posts[category.name] && renderPosts(posts[category.name], category.name)}
+              </Col>
+            ))}
+          </Row>
+        </Col>
+        <Col md={2}>
+          <AdSpace side="우" />
         </Col>
       </Row>
     </Container>

@@ -1,46 +1,94 @@
 import React, { useEffect, useState } from 'react';
 import { Container, Form, Button, Alert } from 'react-bootstrap';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useUser } from '../components/UserContext';
 import api from '../components/api';
 
 function WritePost() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [subjectPrefix, setSubjectPrefix] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useUser();
+  const { category: categoryParam } = useParams();
+  const { user, isLoggedIn } = useUser();
 
   const categories = [
-    { id: 1, name: 'Domestic', path: '/domestic' },
-    { id: 2, name: 'International', path: '/international' },
-    // Add more categories as needed
+    { id: 1, name: '국내축구', path: '/domestic' },
+    { id: 2, name: '해외축구', path: '/international' },
   ];
 
+  const subjectPrefixes = {
+    1: ['일반', '정보', '질문', '사진/영상'],
+    2: ['일반', '정보', '질문', '사진/영상'],
+  };
+
   useEffect(() => {
-    if (!user) {
-      navigate('/login', { state: { from: location.pathname } });
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '지금 새로고침을 하시면 모든 내용이 사라집니다.';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (!isLoggedIn) {
+        try {
+          await api.get('/auth/check');
+          // If the request is successful, the user is logged in
+          setIsLoading(false);
+        } catch (error) {
+          console.log('User not authenticated, redirecting to login');
+          navigate('/login', { state: { from: location.pathname } });
+        }
+      } else {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, [isLoggedIn, navigate, location.pathname]);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    let categoryName = location.state?.category || categoryParam;
+    console.log('Category name:', categoryName);
+
+    if (!categoryName) {
+      console.log('No category found, defaulting to 국내축구');
+      categoryName = '국내축구';
     }
 
-    // Set the default category based on the state passed from the previous page
-    if (location.state && location.state.category) {
-      const category = categories.find(cat => cat.name.toLowerCase() === location.state.category);
-      if (category) {
-        setSelectedCategory(category.id.toString());
-      }
+    const category = categories.find(cat => cat.name.toLowerCase() === categoryName.toLowerCase());
+    console.log('Found category:', category);
+    
+    if (category) {
+      console.log('Setting selected category:', category.id);
+      setSelectedCategory(category.id);
+      
+      const initialSubjectPrefix = subjectPrefixes[category.id][0];
+      console.log('Setting initial subject prefix:', initialSubjectPrefix);
+      setSubjectPrefix(initialSubjectPrefix);
+    } else {
+      console.log('Invalid category, defaulting to 국내축구');
+      setSelectedCategory(1);
+      setSubjectPrefix(subjectPrefixes[1][0]);
     }
-  }, [user, navigate, location]);
+  }, [isLoading, location, categoryParam]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
-    if (!user) {
-      setError('로그인이 필요합니다.');
-      return;
-    }
 
     if (!selectedCategory) {
       setError('카테고리를 선택해주세요.');
@@ -51,16 +99,21 @@ function WritePost() {
       const response = await api.post('/posts', {
         title,
         content,
-        categoryIds: [parseInt(selectedCategory)],
+        categoryIds: [selectedCategory],
+        subjectPrefix,
       });
-      console.log('Post creation response:', response.data);
-      const category = categories.find(cat => cat.id.toString() === selectedCategory);
+      console.log('API response:', response.data);
+      const category = categories.find(cat => cat.id === selectedCategory);
       navigate(category.path);
     } catch (error) {
-      console.error('Error creating post:', error.response?.data || error.message);
+      console.error('Error submitting post:', error);
       setError(error.response?.data?.message || '게시글 작성 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <Container className="mt-5">
@@ -89,18 +142,21 @@ function WritePost() {
           />
         </Form.Group>
         <Form.Group className="mb-3">
-          <Form.Label>카테고리</Form.Label>
+          <Form.Label>말머리</Form.Label>
           <Form.Select 
-            value={selectedCategory} 
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            value={subjectPrefix} 
+            onChange={(e) => setSubjectPrefix(e.target.value)}
             required
           >
-            <option value="">카테고리 선택</option>
-            {categories.map(category => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
+            {selectedCategory && subjectPrefixes[selectedCategory] ? (
+              subjectPrefixes[selectedCategory].map((prefix, index) => (
+                <option key={index} value={prefix}>
+                  {prefix}
+                </option>
+              ))
+            ) : (
+              <option>말머리를 선택할 수 없습니다</option>
+            )}
           </Form.Select>
         </Form.Group>
         <Button variant="primary" type="submit">

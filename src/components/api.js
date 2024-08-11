@@ -6,13 +6,9 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const userString = localStorage.getItem('user');
-    if (userString) {
-      const user = JSON.parse(userString);
-      if (user && user.token) {
-        config.headers['Authorization'] = `Bearer ${user.token}`;
-        console.log('Authorization header set:', config.headers['Authorization']);
-      }
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
   },
@@ -23,9 +19,18 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 403) {
-      console.error('Authentication error:', error);
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        window.location.href = '/login';
+      } catch (refreshError) {
+        console.log('Authentication failed');
+        localStorage.removeItem('token');
+        localStorage.removeItem('isLoggedIn');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

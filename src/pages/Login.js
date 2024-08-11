@@ -9,15 +9,15 @@ function Login() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const { login } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
-  const { setUser } = useUser();
 
   const from = location.state?.from || '/';
 
   const handleRememberMeChange = (e) => {
     if (e.target.checked) {
-      const userConfirmed = window.confirm('이 버튼을 클릭 시 창을 닫아도 로그인이 유지됩니다. 공공장소에서 사용하는 것을 비추천합니다.');
+      const userConfirmed = window.confirm('이 버튼을 클릭 시 창을 닫아도 로그인이 유지됩니다\n공공장소에서 사용하는 것을 비추천합니다');
       if (userConfirmed) {
         setRememberMe(true);
       } else {
@@ -30,32 +30,27 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
     try {
       const response = await api.post('/auth/login', { email, password, rememberMe });
-      console.log('Login response:', response.data);
-      
-      if (response.data && response.data.token) {
-        const userData = {
-          ...response.data,
-          token: response.data.token
-        };
-        
-        if (rememberMe) {
-          localStorage.setItem('user', JSON.stringify(userData));
-        } else {
-          sessionStorage.setItem('user', JSON.stringify(userData));
-        }
-        
-        console.log('User data stored in ' + (rememberMe ? 'localStorage' : 'sessionStorage') + ':', userData);
-        setUser(userData);
+      if (response.data && response.data.accessToken) {
+        localStorage.setItem('token', response.data.accessToken);
+        localStorage.setItem('isLoggedIn', 'true');
+        login(response.data);
         navigate(from, { replace: true });
       } else {
-        throw new Error('Token not received from server');
+        setError('Login failed: No access token received');
       }
-    } catch (error) {
-      console.error('Login error:', error.response?.data || error.message);
-      setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+    } catch (err)  {
+      if (err.response) {
+        console.error('Error response:', err.response.data);
+        console.error('Error status:', err.response.status);
+      }
+      if (err.response && err.response.status === 400) {
+        setError('이메일/비밀번호가 올바르지 않습니다.');
+      } 
+      else if (err.response && err.response.status === 429) {
+        setError('너무 많은 로그인 시도입니다. 잠시 후 다시 시도해주세요');
+      }
     }
   };
 
