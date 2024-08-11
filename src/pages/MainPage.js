@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Alert } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import "../styles/MainPage.css"
 
 function MainPage() {
   const [categories, setCategories] = useState([]);
   const [posts, setPosts] = useState({});
   const [error, setError] = useState(null);
+  const [visitedPosts, setVisitedPosts] = useState(new Set());
 
   useEffect(() => {
+    // 로컬로부터 방문했던 건 불러오게
+    const storedVisitedPosts = JSON.parse(localStorage.getItem('visitedPosts') || '[]');
+    setVisitedPosts(new Set(storedVisitedPosts));
+
     const fetchCategoriesAndPosts = async () => {
       try {
         const categoriesResponse = await axios.get('/api/categories');
@@ -47,27 +53,35 @@ function MainPage() {
 
         setPosts(postsObject);
       } catch (err) {
-        setError('Failed to fetch data. Please try again later.');
+        setError('게시글을 불러오는 데 문제가 있습니다.\n잠시 후에 다시 시도해주세요...');
       }
     };
 
     fetchCategoriesAndPosts();
   }, []);
 
+  const handlePostClick = (postId) => {
+    const updatedVisitedPosts = new Set(visitedPosts);
+    updatedVisitedPosts.add(postId);
+    setVisitedPosts(updatedVisitedPosts);
+    localStorage.setItem('visitedPosts', JSON.stringify([...updatedVisitedPosts]));
+  };
+
   const renderPosts = (categoryPosts, categoryName) => {
-    return categoryPosts.map(post => (
-      <Card key={post.id} className="mb-3">
-        <Card.Body>
-          <Card.Title>
-            <Link to={`/posts/${categoryName}/${post.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-              {post.title}
-              <span style={{ fontSize: '0.8em', marginLeft: '5px', color: '#003CFA' }}>
-                [{post.commentCount}]
-              </span>
-            </Link>
-          </Card.Title>
-        </Card.Body>
-      </Card>
+    return categoryPosts.map((post, index) => (
+      <div key={post.id} className="post-item">
+        <Link 
+          to={`/posts/${categoryName}/${post.id}`} 
+          className={`post-link ${visitedPosts.has(post.id) ? 'visited' : ''}`}
+          onClick={() => handlePostClick(post.id)}
+        >
+          {post.title}
+          <span className="comment-count">
+            [{post.commentCount}]
+          </span>
+        </Link>
+        {index < categoryPosts.length - 1 && <hr className="post-divider" />}
+      </div>
     ));
   };
 
@@ -96,7 +110,7 @@ function MainPage() {
             {categories.map(category => (
               <Col md={6} key={category.id} className="post-column">
                 <h2 className="mb-3">
-                  <Link to={`/${category.name}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                  <Link to={`/${category.name}`} className="category-link">
                     {category.nameKr}
                   </Link>
                 </h2>

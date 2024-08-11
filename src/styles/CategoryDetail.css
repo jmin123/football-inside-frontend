@@ -1,0 +1,28 @@
+.visited {
+  color: #888;
+}
+
+.custom-table th,
+.custom-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-table th:first-child,
+.custom-table td:first-child {
+  white-space: normal;
+}
+
+.custom-table th {
+  text-align: center;
+}
+
+.custom-table td {
+  text-align: left;
+}
+
+.custom-table td:nth-child(3),
+.custom-table td:nth-child(4) {
+  text-align: center;
+}

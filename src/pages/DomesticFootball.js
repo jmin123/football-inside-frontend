@@ -3,6 +3,7 @@ import { Table, Container, Pagination, Button, Row, Col } from 'react-bootstrap'
 import axios from 'axios';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useUser } from '../components/UserContext';
+import "../styles/CategoryDetail.css";
 
 function DomesticFootball() {
   const [posts, setPosts] = useState([]);
@@ -11,6 +12,7 @@ function DomesticFootball() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useUser();
+  const [visitedPosts, setVisitedPosts] = useState(new Set());
 
   const handleWritePost = () => {
     if (user) {
@@ -21,6 +23,9 @@ function DomesticFootball() {
   };
 
   useEffect(() => {
+    const storedVisitedPosts = JSON.parse(localStorage.getItem('visitedPosts') || '[]');
+    setVisitedPosts(new Set(storedVisitedPosts));
+
     fetchPosts(currentPage);
   }, [currentPage]);
 
@@ -34,14 +39,35 @@ function DomesticFootball() {
   };
 
   const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString('ko-KR', options);
+    const postDate = new Date(dateString);
+    const now = new Date();
+
+    if (postDate.toDateString() === now.toDateString()) {
+      // 당일은 시간만
+      return postDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } else if (postDate.getFullYear() === now.getFullYear()) {
+      // 올해면 월.일
+      const parts = postDate.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }).split('.');
+      return `${parts[0].trim()}.${parts[1].trim()}`;
+    } else {
+      // 이외는 년.월.일
+      const parts = postDate.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }).split('.');
+      return `${parts[0].trim()}.${parts[1].trim()}.${parts[2].trim()}`;
+    }
   };
+
 
   const handlePageChange = (newPage) => {
     if (newPage > 0 && newPage <= totalPages) {
       setCurrentPage(newPage);
     }
+  };
+
+  const handlePostClick = (postId) => {
+    const updatedVisitedPosts = new Set(visitedPosts);
+    updatedVisitedPosts.add(postId);
+    setVisitedPosts(updatedVisitedPosts);
+    localStorage.setItem('visitedPosts', JSON.stringify([...updatedVisitedPosts]));
   };
 
   const AdSpace = ({ side }) => (
@@ -51,7 +77,7 @@ function DomesticFootball() {
       padding: '10px',
       position: 'sticky',
     }}>
-      <p style={{ textAlign: 'center' }}>Ad Space ({side})</p>
+      <p style={{ textAlign: 'center' }}>광고란({side})</p>
     </div>
   );
 
@@ -63,7 +89,13 @@ function DomesticFootball() {
         </Col>
         <Col lg={7} md={9}>
           <h1 className="my-4">국내축구</h1>
-          <Table striped bordered hover>
+          <Table striped bordered hover className="custom-table">
+            <colgroup>
+              <col style={{width: '50%'}} />
+              <col style={{width: '30%'}} />
+              <col style={{width: '10%'}} />
+              <col style={{width: '10%'}} />
+            </colgroup>
             <thead>
               <tr>
                 <th>제목</th>
@@ -77,7 +109,13 @@ function DomesticFootball() {
                 posts.map(post => (
                   <tr key={post.id}>
                     <td>
-                      <Link to={`/posts/domestic/${post.id}`}>{post.title}</Link>
+                      <Link 
+                        to={`/posts/domestic/${post.id}`}
+                        className={visitedPosts.has(post.id) ? 'visited' : ''}
+                        onClick={() => handlePostClick(post.id)}
+                      >
+                        {post.title}
+                      </Link>
                     </td>
                     <td>{post.username}</td>
                     <td>{post.recommendationCount}</td>

@@ -4,6 +4,7 @@ import { Container, Row, Col, Card, ListGroup, Form, Button, Modal, Alert } from
 import { BarChartFill, ListUl } from 'react-bootstrap-icons';
 import api from '../components/api';
 import { useUser } from '../components/UserContext';
+import RecommendationSection from './RecommendationSection';
 
 function PostDetail() {
   const [post, setPost] = useState(null);
@@ -11,6 +12,8 @@ function PostDetail() {
   const [categoryMap, setCategoryMap] = useState({});
   const [categoryNameMap, setCategoryNameMap] = useState({});
   const [categoryError, setCategoryError] = useState(null);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [editingCommentId, setEditingCommentId] = useState(null);
@@ -21,11 +24,6 @@ function PostDetail() {
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [isAuthor, setIsAuthor] = useState(false);
-  const [recommendationCount, setRecommendationCount] = useState(0);
-  const [hasRecommended, setHasRecommended] = useState(false);
-  const [recommendError, setRecommendError] = useState('');
-  const [showRecommendations, setShowRecommendations] = useState(false);
-  const [recommendations, setRecommendations] = useState([]);
   const { id } = useParams();
   const { user, setUser } = useUser();
   const [loading, setLoading] = useState(true);
@@ -43,7 +41,6 @@ function PostDetail() {
 
         setPost(postResponse.data);
         setComments(commentsResponse.data.content || []);
-        setRecommendationCount(postResponse.data.recommendationCount);
         setIsAuthor(user && user.username === postResponse.data.username);
 
         if (postResponse.data.categoryName) {
@@ -82,7 +79,6 @@ function PostDetail() {
         setCategoryNameMap(nameMap);
         setCategoryError(null);
       } catch (error) {
-        console.error('Error fetching categories:', error);
         setCategoryError('카테고리를 불러오는 중 오류가 발생했습니다.');
       }
     };
@@ -90,11 +86,6 @@ function PostDetail() {
     fetchData();
     fetchCategories();
   }, [id, user]);
-
-  const handleListClick = () => {
-    const category = Array.isArray(post.categoryName) ? post.categoryName[0] : post.categoryName;
-    navigate(`/${category.toLowerCase()}`);
-  };
 
   useEffect(() => {
     if (showRecommendations && user) {
@@ -107,8 +98,13 @@ function PostDetail() {
       const response = await api.get(`/posts/${id}/recommendations`);
       setRecommendations(response.data);
     } catch (error) {
-      console.error('추천 목록 가져오기 실패 :', error);
+      console.error('추천 목록 가져오기 실패:', error);
     }
+  };
+
+  const handleListClick = () => {
+    const category = Array.isArray(post.categoryName) ? post.categoryName[0] : post.categoryName;
+    navigate(`/${category.toLowerCase()}`);
   };
 
   const formatDate = (date) => {
@@ -182,10 +178,6 @@ function PostDetail() {
       setNewComment('');
       setError('');
     } catch (err) {
-      if (err.response) {
-        console.error('Error response:', err.response.data);
-        console.error('Error status:', err.response.status);
-      }
       if (err.response && err.response.status === 403) {
         setError('인증에 실패했습니다. 다시 로그인해 주세요.');
         localStorage.removeItem('user');
@@ -239,39 +231,6 @@ function PostDetail() {
     }
   };
 
-  const handleRecommend = async () => {
-    if (!user) {
-      setRecommendError('추천하려면 로그인이 필요합니다.');
-      return;
-    }
-
-    try {
-      const response = await api.post(`/posts/${id}/recommend`);
-      setRecommendationCount(response.data.recommendationCount);
-      setHasRecommended(true);
-      setRecommendError('');
-    } catch (error) {
-      console.error('Error recommending post:', error);
-      if (error.response) {
-        switch (error.response.status) {
-          case 400:
-            setRecommendError(error.response.data);
-            break;
-          case 401:
-            setRecommendError('로그인이 필요합니다.');
-            break;
-          case 404:
-            setRecommendError('게시글을 찾을 수 없습니다.');
-            break;
-          default:
-            setRecommendError('게시글 추천 중 오류가 발생했습니다.');
-        }
-      } else {
-        setRecommendError('게시글 추천 중 오류가 발생했습니다.');
-      }
-    }
-  };
-
   if (loading) return <div>로딩중...</div>;
   if (error) return <div>{error}</div>;
   if (!post) return <div>이런! 해당 게시글이 보이지 않네요!</div>;
@@ -300,13 +259,11 @@ function PostDetail() {
               </Card.Subtitle>
               <Card.Text>{post.content}</Card.Text>
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  추천 수: {recommendationCount}
-                  <Button variant="outline-primary" onClick={handleRecommend} className="ms-2">
-                    추천하기
-                  </Button>
-                  {hasRecommended && <span className="ms-2 text-success">추천완료</span>}
-                </div>
+                <RecommendationSection
+                  postId={post.id}
+                  initialRecommendationCount={post.recommendationCount}
+                  user={user}
+                />
                 {user && user.username === post.username && (
                   <div>
                     <Button variant="primary" onClick={handleEdit} className="me-2">수정</Button>
@@ -314,7 +271,6 @@ function PostDetail() {
                   </div>
                 )}
               </div>
-              {recommendError && <Alert variant="danger" className="mt-2">{recommendError}</Alert>}
             </Card.Body>
           </Card>
           {user && (
@@ -331,14 +287,14 @@ function PostDetail() {
                 onClick={() => setShowRecommendations(!showRecommendations)}
                 className="d-flex align-items-center"
               >
-                <BarChartFill size={20} className="me-1" />
+                <BarChartFill size={20} />
               </Button>
             </div>
           )}
-
           {showRecommendations && (
             <Card className="mb-4">
               <Card.Body>
+                <Card.Title>추천한 사용자</Card.Title>
                 <ListGroup variant="flush">
                   {recommendations.length > 0 ? (
                     recommendations.map((username, index) => (
