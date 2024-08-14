@@ -42,8 +42,6 @@ function Login() {
       }
     } catch (err)  {
       if (err.response) {
-        console.error('Error response:', err.response.data);
-        console.error('Error status:', err.response.status);
       }
       if (err.response && err.response.status === 400) {
         setError('이메일/비밀번호가 올바르지 않습니다.');

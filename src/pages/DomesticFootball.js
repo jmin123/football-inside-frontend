@@ -35,7 +35,7 @@ function DomesticFootball() {
         setPosts(response.data.content);
         setTotalPages(response.data.totalPages);
       })
-      .catch(error => console.error('Error fetching domestic football posts:', error));
+      .catch(error => console.error('게시글을 불러오는 데 실패하였습니다.', error));
   };
 
   const formatDate = (dateString) => {
@@ -115,6 +115,7 @@ function DomesticFootball() {
                         onClick={() => handlePostClick(post.id)}
                       >
                         {post.title}
+                        {post.commentCount > 0 && ` [${post.commentCount}]`}
                       </Link>
                     </td>
                     <td>{post.username}</td>

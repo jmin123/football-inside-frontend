@@ -4,6 +4,7 @@ import { Container, Row, Col, Card, ListGroup, Form, Button, Modal, Alert } from
 import { BarChartFill, ListUl } from 'react-bootstrap-icons';
 import api from '../components/api';
 import { useUser } from '../components/UserContext';
+import { formatRelativeTime } from '../utils/dateUtils';
 import RecommendationSection from './RecommendationSection';
 
 function PostDetail() {
@@ -58,7 +59,6 @@ function PostDetail() {
         }
         setLoading(false);
       } catch (err) {
-        console.error('Error fetching data:', err);
         setError('Failed to fetch data');
       } finally {
         setLoading(false);
@@ -231,7 +231,6 @@ function PostDetail() {
     }
   };
 
-  if (loading) return <div>로딩중...</div>;
   if (error) return <div>{error}</div>;
   if (!post) return <div>이런! 해당 게시글이 보이지 않네요!</div>;
 
@@ -343,9 +342,9 @@ function PostDetail() {
                           <p>{comment.content}</p>
                           <div className="d-flex justify-content-between align-items-center">
                             <small className="text-muted">
-                              작성자: {comment.username}
-                              {comment.username === post.username && <strong>(글쓴이)</strong>} |
-                              작성시간: {formatDate(comment.createdAt)}
+                              {comment.username}
+                              {comment.username === post.username} 
+                              　{formatRelativeTime(comment.createdAt)}
                               {isEdited(comment.createdAt, comment.updatedAt) && ` (수정됨)`}
                             </small>
                             {user && user.username === comment.username && (

@@ -9,9 +9,9 @@ function MainPage() {
   const [posts, setPosts] = useState({});
   const [error, setError] = useState(null);
   const [visitedPosts, setVisitedPosts] = useState(new Set());
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    // 로컬로부터 방문했던 건 불러오게
     const storedVisitedPosts = JSON.parse(localStorage.getItem('visitedPosts') || '[]');
     setVisitedPosts(new Set(storedVisitedPosts));
 
@@ -52,8 +52,10 @@ function MainPage() {
         }, {});
 
         setPosts(postsObject);
+        setIsLoaded(true);
       } catch (err) {
         setError('게시글을 불러오는 데 문제가 있습니다.\n잠시 후에 다시 시도해주세요...');
+        setIsLoaded(true);
       }
     };
 
@@ -90,6 +92,10 @@ function MainPage() {
       <p style={{ textAlign: 'center' }}>광고란 ({side})</p>
     </div>
   );
+
+  if (!isLoaded) {
+    return null; // 로딩 중에는 페이지가 비어보이게
+  }
 
   if (error) {
     return (
